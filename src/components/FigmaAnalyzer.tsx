@@ -389,22 +389,67 @@ const FigmaAnalyzer: React.FC = () => {
                       fontSize: '13px',
                       fontFamily: 'monospace'
                     }}>
-                      {analysisResult.analysis.elements.map((element, index) => (
-                        <div key={index} style={{marginBottom: '8px', lineHeight: '1.5'}}>
-                          {(element.properties as Record<string, unknown>).displayFormat as string}
-                        </div>
-                      ))}
+                      {analysisResult.analysis.elements.map((element, index) => {
+                        const props = element.properties as Record<string, unknown>;
+                        const original = props.original as string;
+                        const translated = props.translated as string;
+                        
+                        return (
+                          <div key={index} style={{
+                            marginBottom: '8px', 
+                            lineHeight: '1.5',
+                            padding: '6px 8px',
+                            backgroundColor: '#ffffff',
+                            borderRadius: '4px',
+                            border: '1px solid #e2e8f0'
+                          }}>
+                            <span style={{
+                              color: '#1e40af',
+                              fontWeight: '500'
+                            }}>
+                              {original}
+                            </span>
+                            <span style={{
+                              color: '#6b7280',
+                              margin: '0 6px'
+                            }}>
+                              ：
+                            </span>
+                            <span style={{
+                              color: '#dc2626',
+                              fontWeight: '500'
+                            }}>
+                              {translated}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <button 
-                      className="copy-button"
-                      onClick={() => copyToClipboard(
-                        analysisResult.analysis.elements.map(element => 
-                          (element.properties as Record<string, unknown>).displayFormat as string
-                        ).join('\n')
-                      )}
-                    >
-                      复制翻译对照
-                    </button>
+                    <div style={{display: 'flex', gap: '8px'}}>
+                      <button 
+                        className="copy-button"
+                        onClick={() => copyToClipboard(
+                          analysisResult.analysis.elements.map(element => {
+                            const props = element.properties as Record<string, unknown>;
+                            return `${props.original as string}：${props.translated as string}`;
+                          }).join('\n')
+                        )}
+                        style={{flex: 1}}
+                      >
+                        复制翻译对照
+                      </button>
+                      <button 
+                        className="copy-button"
+                        onClick={() => copyToClipboard(
+                          analysisResult.analysis.elements.map(element => 
+                            (element.properties as Record<string, unknown>).translated as string
+                          ).join('\n')
+                        )}
+                        style={{flex: 1, backgroundColor: '#dc2626'}}
+                      >
+                        仅复制译文
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div>
