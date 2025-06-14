@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Figma AI Analyzer",
+  "version": "1.0.0",
+  "description": "在Figma中分析选中元素并生成JSON格式的AI分析结果",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.figma.com/*",
+    "https://figma.com/*"
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Figma AI Analyzer"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.figma.com/*",
+        "https://figma.com/*"
+      ],
+      "js": ["src/content.ts"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.ts"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injected.js"],
+      "matches": ["https://www.figma.com/*", "https://figma.com/*"]
+    }
+  ]
+} 
