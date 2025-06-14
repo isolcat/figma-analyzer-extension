@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { FigmaSelectionResult, AIAnalysisResponse, ChromeMessage } from '../types';
 import { LANGUAGES } from '../constants';
+import JSONPretty from 'react-json-pretty';
 
 interface SettingsState {
   deepseekApiKey: string;
@@ -453,8 +454,39 @@ const FigmaAnalyzer: React.FC = () => {
                   </div>
                 ) : (
                   <div>
-                    <div className="json-output">
-                      {JSON.stringify((analysisResult.analysis as unknown as Record<string, unknown>).generatedJson || analysisResult.analysis, null, 2)}
+                    <div className="json-pretty-container" style={{
+                      background: '#f8f9fa',
+                      border: '1px solid #e9ecef',
+                      borderRadius: '6px',
+                      padding: '12px',
+                      marginBottom: '10px',
+                      fontSize: '13px',
+                      overflow: 'auto',
+                      maxHeight: '400px'
+                    }}>
+                      <JSONPretty 
+                        id="json-pretty" 
+                        data={(analysisResult.analysis as unknown as Record<string, unknown>).generatedJson || analysisResult.analysis}
+                        theme={{
+                          main: 'line-height:1.3;color:#444;background:#f8f9fa;overflow:auto;',
+                          error: 'line-height:1.3;color:#66d9ef;background:#f8f9fa;overflow:auto;',
+                          key: 'color:#2563eb;font-weight:600;',
+                          string: 'color:#059669;',
+                          value: 'color:#7c3aed;',
+                          boolean: 'color:#dc2626;',
+                          number: 'color:#ea580c;',
+                          null: 'color:#6b7280;',
+                          undefined: 'color:#6b7280;'
+                        }}
+                        space={2}
+                        replacer={(_key, value) => {
+                          // 美化超长文本显示
+                          if (typeof value === 'string' && value.length > 80) {
+                            return value.substring(0, 80) + '...';
+                          }
+                          return value;
+                        }}
+                      />
                     </div>
                     <button 
                       className="copy-button"
