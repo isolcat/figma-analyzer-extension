@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import  { useState, useEffect } from 'react';
 import type { FigmaSelectionResult, AIAnalysisResponse, ChromeMessage } from '../types';
 import { LANGUAGES } from '../constants';
 import JSONPretty from 'react-json-pretty';
@@ -12,7 +12,7 @@ interface SettingsState {
   aiProvider: 'deepseek' | 'openai' | 'claude';
 }
 
-const FigmaAnalyzer: React.FC = () => {
+function FigmaAnalyzer() {
   const [settings, setSettings] = useState<SettingsState>({
     deepseekApiKey: '',
     openaiApiKey: '',
@@ -503,6 +503,6 @@ const FigmaAnalyzer: React.FC = () => {
       )}
     </div>
   );
-};
+}
 
 export default FigmaAnalyzer; 
