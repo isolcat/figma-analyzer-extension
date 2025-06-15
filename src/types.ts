@@ -57,10 +57,30 @@ export interface AnalyzedElement {
 }
 
 // AI服务提供商类型
-export type AIProvider = 'deepseek' | 'openai' | 'claude';
+export type AIProvider = 'deepseek' | 'openai' | 'claude' | 'ollama';
 
 // 操作类型
 export type OperationType = 'analyze' | 'translate' | 'generate-json' | 'translate-and-structure';
+
+// Ollama模型信息类型
+export interface OllamaModel {
+  name: string;
+  model: string;
+  size: number;
+  digest: string;
+  details: {
+    family: string;
+    format: string;
+    parameter_size: string;
+    quantization_level: string;
+  };
+  modified_at: string;
+}
+
+// Ollama模型列表响应类型
+export interface OllamaModelsResponse {
+  models: OllamaModel[];
+}
 
 // AI API请求类型
 export interface AIAnalysisRequest {
@@ -71,6 +91,7 @@ export interface AIAnalysisRequest {
   operation: OperationType;
   aiProvider: AIProvider;
   targetLanguage?: string;
+  ollamaModel?: string; // ollama模型名称
 }
 
 // AI API响应类型
@@ -81,7 +102,7 @@ export interface AIAnalysisResponse {
 
 // Chrome消息类型
 export interface ChromeMessage {
-  type: 'GET_FIGMA_SELECTION' | 'ANALYZE_WITH_AI' | 'FIGMA_DATA_RESPONSE' | 'AI_ANALYSIS_RESPONSE';
+  type: 'GET_FIGMA_SELECTION' | 'ANALYZE_WITH_AI' | 'FIGMA_DATA_RESPONSE' | 'AI_ANALYSIS_RESPONSE' | 'GET_OLLAMA_MODELS' | 'OLLAMA_MODELS_RESPONSE';
   data?: unknown;
   error?: string;
 } 

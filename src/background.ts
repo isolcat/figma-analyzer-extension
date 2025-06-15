@@ -1,21 +1,29 @@
-import type { ChromeMessage, AIAnalysisRequest, AIAnalysisResponse, PageAnalysisResult, AIProvider } from './types';
+import type { ChromeMessage, AIAnalysisRequest, AIAnalysisResponse, PageAnalysisResult, AIProvider, OllamaModelsResponse } from './types';
 import { ANALYSIS_PROMPT_TEMPLATE, TRANSLATION_PROMPT_TEMPLATE, TRANSLATE_AND_STRUCTURE_PROMPT_TEMPLATE } from './prompts';
 
 // 调用不同的AI服务
 async function callAIService(request: AIAnalysisRequest): Promise<string> {
   console.log('🔍 接收到AI请求:', request);
   
-  const result = await chrome.storage.sync.get(['deepseekApiKey', 'openaiApiKey', 'claudeApiKey']);
+  const result = await chrome.storage.sync.get(['deepseekApiKey', 'openaiApiKey', 'claudeApiKey', 'ollamaModel']);
   
   const apiKeys: Record<AIProvider, string> = {
     deepseek: result.deepseekApiKey,
     openai: result.openaiApiKey,
-    claude: result.claudeApiKey
+    claude: result.claudeApiKey,
+    ollama: '' // ollama 不需要 API 密钥
   };
 
-  const apiKey = apiKeys[request.aiProvider];
-  if (!apiKey) {
-    throw new Error(`请先配置${request.aiProvider.toUpperCase()} API密钥`);
+  // ollama 需要检查模型而不是 API 密钥
+  if (request.aiProvider === 'ollama') {
+    if (!request.ollamaModel) {
+      throw new Error('请先选择 Ollama 模型');
+    }
+  } else {
+    const apiKey = apiKeys[request.aiProvider];
+    if (!apiKey) {
+      throw new Error(`请先配置${request.aiProvider.toUpperCase()} API密钥`);
+    }
   }
 
   let prompt: string;
@@ -87,11 +95,13 @@ async function callAIService(request: AIAnalysisRequest): Promise<string> {
 
   switch (request.aiProvider) {
     case 'deepseek':
-      return await callDeepSeekAPI(prompt, apiKey);
+      return await callDeepSeekAPI(prompt, apiKeys.deepseek);
     case 'openai':
-      return await callOpenAIAPI(prompt, apiKey);
+      return await callOpenAIAPI(prompt, apiKeys.openai);
     case 'claude':
-      return await callClaudeAPI(prompt, apiKey);
+      return await callClaudeAPI(prompt, apiKeys.claude);
+    case 'ollama':
+      return await callOllamaAPI(prompt, request.ollamaModel!);
     default:
       throw new Error('不支持的AI服务');
   }
@@ -198,6 +208,68 @@ async function callClaudeAPI(prompt: string, apiKey: string): Promise<string> {
   }
   
   return content;
+}
+
+// Ollama API调用
+async function callOllamaAPI(prompt: string, modelName: string): Promise<string> {
+  const requestBody = {
+    model: modelName,
+    messages: [{ role: 'user', content: prompt }],
+    stream: false, // 禁用流式输出，直接获取完整响应
+    think: false   // 禁用思考模式，直接返回结果
+  };
+  
+  console.log('🚀 发送到Ollama的请求体:', JSON.stringify(requestBody, null, 2));
+  
+  const response = await fetch('http://localhost:11434/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Ollama API Error:', errorText);
+    if (response.status === 0 || !response.status) {
+      throw new Error('无法连接到Ollama服务，请确保Ollama正在运行 (http://localhost:11434)');
+    }
+    throw new Error(`Ollama API错误: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  console.log('📥 Ollama API完整响应:', JSON.stringify(data, null, 2));
+  
+  const content = data.message?.content;
+  
+  if (!content) {
+    throw new Error('Ollama API返回空内容');
+  }
+  
+  console.log('✅ Ollama API返回内容:', content);
+  return content;
+}
+
+// 获取Ollama本地模型列表
+async function getOllamaModels(): Promise<OllamaModelsResponse> {
+  try {
+    const response = await fetch('http://localhost:11434/api/tags');
+    
+    if (!response.ok) {
+      if (response.status === 0 || !response.status) {
+        throw new Error('无法连接到Ollama服务，请确保Ollama正在运行');
+      }
+      throw new Error(`获取模型列表失败: ${response.status}`);
+    }
+
+    const data = await response.json() as OllamaModelsResponse;
+    console.log('📋 Ollama模型列表:', data);
+    return data;
+  } catch (error) {
+    console.error('获取Ollama模型失败:', error);
+    throw error;
+  }
 }
 
 // 获取语言名称
@@ -451,6 +523,25 @@ chrome.runtime.onMessage.addListener((message: ChromeMessage, _sender, sendRespo
         console.error('AI服务调用失败:', error);
         sendResponse({
           type: 'AI_ANALYSIS_RESPONSE',
+          error: error.message
+        });
+      });
+
+    return true; // 保持消息通道开放
+  }
+
+  if (message.type === 'GET_OLLAMA_MODELS') {
+    getOllamaModels()
+      .then(modelsResponse => {
+        sendResponse({
+          type: 'OLLAMA_MODELS_RESPONSE',
+          data: modelsResponse
+        });
+      })
+      .catch(error => {
+        console.error('获取Ollama模型失败:', error);
+        sendResponse({
+          type: 'OLLAMA_MODELS_RESPONSE',
           error: error.message
         });
       });

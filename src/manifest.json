@@ -10,7 +10,9 @@
   ],
   "host_permissions": [
     "https://www.figma.com/*",
-    "https://figma.com/*"
+    "https://figma.com/*",
+    "http://localhost:11434/*",
+    "http://127.0.0.1:11434/*"
   ],
   "action": {
     "default_popup": "src/popup.html",

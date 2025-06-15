@@ -218,58 +218,91 @@ function extractMeaningfulTexts() {
   return textElements.slice(0, 50); // 限制数量
 }
 
-// 提取可见文本（最后的备用方案）
+// 提取可见文本（最后的备用方案）- 修正为提取完整文本块
 function extractVisibleTexts() {
   const textElements = [];
   const seenTexts = new Set();
   
-  const walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode: function(node) {
-        const text = node.textContent?.trim();
-        const parent = node.parentElement;
-        
-        if (!text || 
-            text.length < 2 || 
-            text.length > 200 ||
-            seenTexts.has(text) ||
-            !parent ||
-            !isElementVisible(parent)) {
-          return NodeFilter.FILTER_REJECT;
-        }
-        
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    }
-  );
+  // 使用元素选择器而不是文本节点遍历，避免将完整文本分解
+  const textSelectors = [
+    'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+    'span', 'div', 'a', 'button', 'label', 'td', 'th',
+    '[role="button"]', '[role="heading"]', '[role="text"]',
+    '*:not(script):not(style):not(noscript):not(meta):not(link)'
+  ];
   
-  let node;
-  while (node = walker.nextNode()) {
-    const text = node.textContent.trim();
-    if (isValidUIText(text)) {
-      seenTexts.add(text);
-      const parent = node.parentElement;
-      const rect = parent.getBoundingClientRect();
-      
-      textElements.push({
-        id: `visible-${textElements.length}`,
-        name: `可见文本 ${textElements.length + 1}`,
-        text: text,
-        fontSize: getComputedStyle(parent).fontSize || '16px',
-        fontFamily: getComputedStyle(parent).fontFamily || 'Unknown',
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height
+  const processedElements = new Set();
+  
+  textSelectors.forEach(selector => {
+    try {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        // 避免重复处理同一个元素
+        if (processedElements.has(element)) return;
+        
+        // 获取元素的直接文本内容（不包含子元素）
+        const textContent = getDirectTextContent(element);
+        
+        if (textContent && 
+            textContent.length > 1 && 
+            textContent.length < 500 &&
+            !seenTexts.has(textContent) &&
+            isValidUIText(textContent) &&
+            isElementVisible(element)) {
+          
+          seenTexts.add(textContent);
+          processedElements.add(element);
+          const rect = element.getBoundingClientRect();
+          
+          textElements.push({
+            id: `visible-${textElements.length}`,
+            name: `可见文本 ${textElements.length + 1}`,
+            text: textContent,
+            fontSize: getComputedStyle(element).fontSize || '16px',
+            fontFamily: getComputedStyle(element).fontFamily || 'Unknown',
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height
+          });
+          
+          if (textElements.length >= 30) return; // 限制数量
+        }
       });
-      
-      if (textElements.length >= 30) break; // 限制数量
+    } catch (e) {
+      console.warn(`选择器 ${selector} 查询失败:`, e);
+    }
+    
+    if (textElements.length >= 30) return; // 限制数量
+  });
+  
+  return textElements;
+}
+
+// 获取元素的直接文本内容，不包含子元素的文本
+function getDirectTextContent(element) {
+  let text = '';
+  
+  // 遍历直接子节点，只获取文本节点
+  for (let child of element.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      text += child.textContent || '';
     }
   }
   
-  return textElements;
+  // 如果没有直接文本内容，但元素只有一个子元素，获取该子元素的文本
+  if (!text.trim() && element.children.length === 1) {
+    const childElement = element.children[0];
+    // 递归获取子元素的直接文本内容
+    text = getDirectTextContent(childElement);
+  }
+  
+  // 如果还是没有文本，且元素没有子元素，获取完整文本内容
+  if (!text.trim() && element.children.length === 0) {
+    text = element.textContent || '';
+  }
+  
+  return text.trim();
 }
 
 // 检查文本是否为有效的UI文案

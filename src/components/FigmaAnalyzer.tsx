@@ -1,5 +1,5 @@
 import  { useState, useEffect } from 'react';
-import type { FigmaSelectionResult, AIAnalysisResponse, ChromeMessage } from '../types';
+import type { FigmaSelectionResult, AIAnalysisResponse, ChromeMessage, OllamaModelsResponse, OllamaModel } from '../types';
 import { LANGUAGES } from '../constants';
 import JSONPretty from 'react-json-pretty';
 
@@ -9,7 +9,8 @@ interface SettingsState {
   claudeApiKey: string;
   customPrompt: string;
   projectDescription: string;
-  aiProvider: 'deepseek' | 'openai' | 'claude';
+  aiProvider: 'deepseek' | 'openai' | 'claude' | 'ollama';
+  ollamaModel: string;
 }
 
 function FigmaAnalyzer() {
@@ -19,7 +20,8 @@ function FigmaAnalyzer() {
     claudeApiKey: '',
     customPrompt: '',
     projectDescription: '',
-    aiProvider: 'deepseek'
+    aiProvider: 'deepseek',
+    ollamaModel: ''
   });
   const [figmaData, setFigmaData] = useState<FigmaSelectionResult | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResponse | null>(null);
@@ -27,6 +29,8 @@ function FigmaAnalyzer() {
   const [status, setStatus] = useState<{type: 'loading' | 'success' | 'error', message: string} | null>(null);
   const [activeTab, setActiveTab] = useState<'settings' | 'extract' | 'analysis'>('settings');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   // 加载保存的设置
   useEffect(() => {
@@ -36,7 +40,8 @@ function FigmaAnalyzer() {
       'claudeApiKey', 
       'customPrompt', 
       'projectDescription', 
-      'aiProvider'
+      'aiProvider',
+      'ollamaModel'
     ], (result) => {
       setSettings({
         deepseekApiKey: result.deepseekApiKey || '',
@@ -44,10 +49,18 @@ function FigmaAnalyzer() {
         claudeApiKey: result.claudeApiKey || '',
         customPrompt: result.customPrompt || '',
         projectDescription: result.projectDescription || '',
-        aiProvider: result.aiProvider || 'deepseek'
+        aiProvider: result.aiProvider || 'deepseek',
+        ollamaModel: result.ollamaModel || ''
       });
     });
   }, []);
+
+  // 当切换到ollama时自动获取模型列表
+  useEffect(() => {
+    if (settings.aiProvider === 'ollama' && ollamaModels.length === 0) {
+      getOllamaModels();
+    }
+  }, [settings.aiProvider]);
 
   // 保存设置
   const saveSettings = () => {
@@ -55,6 +68,40 @@ function FigmaAnalyzer() {
       setStatus({type: 'success', message: '设置已保存'});
       setTimeout(() => setStatus(null), 2000);
     });
+  };
+
+  // 获取Ollama模型列表
+  const getOllamaModels = async () => {
+    setLoadingModels(true);
+    setStatus({type: 'loading', message: '正在获取Ollama模型列表...'});
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_OLLAMA_MODELS'
+      } as ChromeMessage);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      const modelsResponse = response.data as OllamaModelsResponse;
+      setOllamaModels(modelsResponse.models);
+      
+      if (modelsResponse.models.length === 0) {
+        setStatus({type: 'error', message: '未找到Ollama模型，请先安装模型'});
+      } else {
+        setStatus({type: 'success', message: `成功获取 ${modelsResponse.models.length} 个Ollama模型`});
+        // 如果还没选择模型，自动选择第一个
+        if (!settings.ollamaModel && modelsResponse.models.length > 0) {
+          setSettings({...settings, ollamaModel: modelsResponse.models[0].name});
+        }
+      }
+    } catch (error) {
+      console.error('获取Ollama模型失败:', error);
+      setStatus({type: 'error', message: error instanceof Error ? error.message : '获取Ollama模型失败'});
+    } finally {
+      setLoadingModels(false);
+    }
   };
 
   // 获取Figma选中元素
@@ -106,10 +153,18 @@ function FigmaAnalyzer() {
       return;
     }
 
-    const apiKey = settings[`${settings.aiProvider}ApiKey` as keyof SettingsState] as string;
-    if (!apiKey) {
-      setStatus({type: 'error', message: `请先配置${settings.aiProvider.toUpperCase()} API密钥`});
-      return;
+    // Ollama 检查模型选择，其他检查 API 密钥
+    if (settings.aiProvider === 'ollama') {
+      if (!settings.ollamaModel) {
+        setStatus({type: 'error', message: '请先选择Ollama模型'});
+        return;
+      }
+    } else {
+      const apiKey = settings[`${settings.aiProvider}ApiKey` as keyof SettingsState] as string;
+      if (!apiKey) {
+        setStatus({type: 'error', message: `请先配置${settings.aiProvider.toUpperCase()} API密钥`});
+        return;
+      }
     }
 
     setLoading(true);
@@ -127,7 +182,8 @@ function FigmaAnalyzer() {
           projectDescription: settings.projectDescription,
           operation: operation,
           aiProvider: settings.aiProvider,
-          targetLanguage: targetLanguage
+          targetLanguage: targetLanguage,
+          ollamaModel: settings.ollamaModel
         }
       } as ChromeMessage);
 
@@ -198,7 +254,7 @@ function FigmaAnalyzer() {
             <label>AI服务提供商</label>
             <select
               value={settings.aiProvider}
-              onChange={(e) => setSettings({...settings, aiProvider: e.target.value as 'deepseek' | 'openai' | 'claude'})}
+              onChange={(e) => setSettings({...settings, aiProvider: e.target.value as 'deepseek' | 'openai' | 'claude' | 'ollama'})}
               style={{
                 width: '100%',
                 padding: '8px 12px',
@@ -210,21 +266,68 @@ function FigmaAnalyzer() {
               <option value="deepseek">DeepSeek</option>
               <option value="openai">OpenAI</option>
               <option value="claude">Claude</option>
+              <option value="ollama">Ollama (本地)</option>
             </select>
           </div>
 
-          <div className="input-group">
-            <label>{settings.aiProvider.toUpperCase()} API密钥</label>
-            <input
-              type="password"
-              value={settings[`${settings.aiProvider}ApiKey` as keyof SettingsState] as string}
-              onChange={(e) => setSettings({
-                ...settings,
-                [`${settings.aiProvider}ApiKey`]: e.target.value
-              })}
-              placeholder={`请输入您的${settings.aiProvider.toUpperCase()} API密钥`}
-            />
-          </div>
+          {settings.aiProvider !== 'ollama' ? (
+            <div className="input-group">
+              <label>{settings.aiProvider.toUpperCase()} API密钥</label>
+              <input
+                type="password"
+                value={settings[`${settings.aiProvider}ApiKey` as keyof SettingsState] as string}
+                onChange={(e) => setSettings({
+                  ...settings,
+                  [`${settings.aiProvider}ApiKey`]: e.target.value
+                })}
+                placeholder={`请输入您的${settings.aiProvider.toUpperCase()} API密钥`}
+              />
+            </div>
+          ) : (
+            <div className="input-group">
+              <label>Ollama模型选择</label>
+              <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                <select
+                  value={settings.ollamaModel}
+                  onChange={(e) => setSettings({...settings, ollamaModel: e.target.value})}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '12px'
+                  }}
+                  disabled={ollamaModels.length === 0}
+                >
+                  <option value="">请选择模型</option>
+                  {ollamaModels.map(model => (
+                    <option key={model.name} value={model.name}>
+                      {model.name} ({(model.size / 1024 / 1024 / 1024).toFixed(1)}GB)
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={getOllamaModels}
+                  disabled={loadingModels}
+                  style={{
+                    padding: '8px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    backgroundColor: '#f8f9fa',
+                    cursor: loadingModels ? 'not-allowed' : 'pointer',
+                    minWidth: '80px'
+                  }}
+                >
+                  {loadingModels ? '加载中...' : '刷新'}
+                </button>
+              </div>
+              <small style={{color: '#6b7280', fontSize: '11px'}}>
+                请确保Ollama服务已启动 (http://localhost:11434)
+              </small>
+            </div>
+          )}
 
           <div className="input-group">
             <label>项目描述 (可选)</label>
