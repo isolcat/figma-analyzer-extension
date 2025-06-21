@@ -1,12 +1,14 @@
 import  { useState, useEffect } from 'react';
 import type { FigmaSelectionResult, AIAnalysisResponse, ChromeMessage, OllamaModelsResponse, OllamaModel } from '../types';
 import { LANGUAGES } from '../constants';
+import { FigmaApiService } from '../figmaApi';
 import JSONPretty from 'react-json-pretty';
 
 interface SettingsState {
   deepseekApiKey: string;
   openaiApiKey: string;
   claudeApiKey: string;
+  figmaApiToken: string;
   customPrompt: string;
   projectDescription: string;
   aiProvider: 'deepseek' | 'openai' | 'claude' | 'ollama';
@@ -18,6 +20,7 @@ function FigmaAnalyzer() {
     deepseekApiKey: '',
     openaiApiKey: '',
     claudeApiKey: '',
+    figmaApiToken: '',
     customPrompt: '',
     projectDescription: '',
     aiProvider: 'deepseek',
@@ -31,6 +34,9 @@ function FigmaAnalyzer() {
   const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  // 简化：只保留获取范围选择
+  const [useFullFile, setUseFullFile] = useState(false);
+  const [hasUrlNodeId, setHasUrlNodeId] = useState(false);
 
   // 加载保存的设置
   useEffect(() => {
@@ -38,6 +44,7 @@ function FigmaAnalyzer() {
       'deepseekApiKey', 
       'openaiApiKey', 
       'claudeApiKey', 
+      'figmaApiToken',
       'customPrompt', 
       'projectDescription', 
       'aiProvider',
@@ -47,6 +54,7 @@ function FigmaAnalyzer() {
         deepseekApiKey: result.deepseekApiKey || '',
         openaiApiKey: result.openaiApiKey || '',
         claudeApiKey: result.claudeApiKey || '',
+        figmaApiToken: result.figmaApiToken || '',
         customPrompt: result.customPrompt || '',
         projectDescription: result.projectDescription || '',
         aiProvider: result.aiProvider || 'deepseek',
@@ -61,6 +69,29 @@ function FigmaAnalyzer() {
       getOllamaModels();
     }
   }, [settings.aiProvider]);
+
+  // 自动检测当前页面是否包含选中元素
+  useEffect(() => {
+    const checkUrlNodeId = async () => {
+      try {
+        const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+        const currentTab = tabs[0];
+        
+        if (currentTab.url?.includes('figma.com')) {
+          const nodeId = FigmaApiService.extractNodeIdFromUrl(currentTab.url);
+          setHasUrlNodeId(!!nodeId);
+          
+          if (nodeId) {
+            console.log('🎯 检测到URL中包含节点ID:', nodeId);
+          }
+        }
+      } catch (error) {
+        console.warn('检测URL节点ID失败:', error);
+      }
+    };
+
+    checkUrlNodeId();
+  }, [activeTab]); // 当切换到提取标签页时检查
 
   // 保存设置
   const saveSettings = () => {
@@ -104,25 +135,55 @@ function FigmaAnalyzer() {
     }
   };
 
-  // 获取Figma选中元素
-  const getFigmaSelection = async () => {
+  // 获取Figma文件数据
+  const getFigmaFileData = async () => {
     setLoading(true);
-    setStatus({type: 'loading', message: '正在获取Figma选中元素...'});
+    setStatus({type: 'loading', message: '正在获取Figma文件数据...'});
 
     try {
+      // 检查 Figma API Token
+      if (!settings.figmaApiToken) {
+        throw new Error('请先在设置中配置 Figma API Token');
+      }
+
+      // 获取当前标签页 URL
       const tabs = await chrome.tabs.query({active: true, currentWindow: true});
       const currentTab = tabs[0];
 
-      if (!currentTab.id) {
-        throw new Error('无法获取当前标签页');
-      }
-
       if (!currentTab.url?.includes('figma.com')) {
-        throw new Error('请在Figma页面中使用此扩展');
+        throw new Error('请在Figma文件页面中使用此扩展');
       }
 
-      const response = await chrome.tabs.sendMessage(currentTab.id, {
-        type: 'GET_FIGMA_SELECTION'
+      // 从 URL 中提取文件 ID
+      const fileId = FigmaApiService.extractFileIdFromUrl(currentTab.url);
+      if (!fileId) {
+        throw new Error('无法从当前 URL 中提取 Figma 文件 ID，请确保在正确的 Figma 文件页面');
+      }
+
+      // 检查URL中是否包含节点ID（用户选中了元素）
+      const urlNodeId = FigmaApiService.extractNodeIdFromUrl(currentTab.url);
+      setHasUrlNodeId(!!urlNodeId);
+
+      console.log('🔍 提取到文件 ID:', fileId);
+      console.log('🎯 URL中的节点 ID:', urlNodeId || '无');
+
+      // 构建请求参数
+      const requestData = {
+        fileId: fileId,
+        figmaApiToken: settings.figmaApiToken,
+        currentUrl: currentTab.url
+      };
+
+      // 根据筛选选项添加参数
+      if (useFullFile) {
+        // 文件模式：获取整个文件
+        Object.assign(requestData, { useFullFile: true });
+      }
+
+      // 调用 background script 获取文件数据
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_FIGMA_FILE',
+        data: requestData
       } as ChromeMessage);
 
       if (response.error) {
@@ -132,10 +193,11 @@ function FigmaAnalyzer() {
       const data = response.data as FigmaSelectionResult;
       setFigmaData(data);
       
-      if (data.elements.length === 0 && data.texts.length === 0) {
-        setStatus({type: 'error', message: '未检测到选中的Figma元素，请先在Figma中选择一些元素'});
+      if (data.texts.length === 0) {
+        setStatus({type: 'error', message: '未找到任何文案，请检查筛选条件或文件内容'});
       } else {
-        setStatus({type: 'success', message: `成功获取 ${data.elements.length} 个元素，其中包含 ${data.totalTextCount} 个文案`});
+        const scopeText = useFullFile ? '整个文件' : '智能检测';
+        setStatus({type: 'success', message: `成功获取${scopeText}数据，包含 ${data.totalTextCount} 个文案`});
         setActiveTab('analysis');
       }
     } catch (error) {
@@ -330,6 +392,19 @@ function FigmaAnalyzer() {
           )}
 
           <div className="input-group">
+            <label>Figma API Token <span style={{color: '#ef4444'}}>*</span></label>
+            <input
+              type="password"
+              value={settings.figmaApiToken}
+              onChange={(e) => setSettings({...settings, figmaApiToken: e.target.value})}
+              placeholder="请输入您的 Figma API Token"
+            />
+            <small style={{color: '#6b7280', fontSize: '11px'}}>
+              获取方式：进入 <a href="https://www.figma.com/developers/api#access-tokens" target="_blank" rel="noopener noreferrer" style={{color: '#2563eb'}}>Figma 开发者页面</a>，生成 Personal Access Token
+            </small>
+          </div>
+
+          <div className="input-group">
             <label>项目描述 (可选)</label>
             <textarea
               value={settings.projectDescription}
@@ -359,12 +434,55 @@ function FigmaAnalyzer() {
         <div className="section">
           <div className="section-title">文案提取</div>
           
+          {/* 智能检测提示 */}
+          {hasUrlNodeId && (
+            <div style={{
+              background: '#e3f2fd',
+              border: '1px solid #2196f3',
+              borderRadius: '6px',
+              padding: '10px',
+              marginBottom: '15px',
+              fontSize: '12px',
+              color: '#1565c0'
+            }}>
+              🎯 检测到您在 Figma 中选中了元素，将优先获取选中内容的文案
+            </div>
+          )}
+          
+          {/* 获取范围选择 */}
+          <div className="input-group">
+            <label>获取范围</label>
+            <select
+              value={useFullFile ? 'file' : 'auto'}
+              onChange={(e) => {
+                if (e.target.value === 'file') {
+                  setUseFullFile(true);
+                } else {
+                  setUseFullFile(false);
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '12px'
+              }}
+            >
+              <option value="auto">🎯 智能检测（推荐）</option>
+              <option value="file">📁 整个文件</option>
+            </select>
+            <small style={{color: '#6b7280', fontSize: '11px'}}>
+              智能检测：自动识别URL中的选中元素，或使用整个文件
+            </small>
+          </div>
+          
           <button 
             className="button button-primary" 
-            onClick={getFigmaSelection}
+            onClick={getFigmaFileData}
             disabled={loading}
           >
-            获取Figma选中元素
+            获取Figma文件数据
           </button>
 
           {figmaData && (figmaData.elements.length > 0 || figmaData.texts.length > 0) && (

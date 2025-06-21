@@ -100,9 +100,44 @@ export interface AIAnalysisResponse {
   rawResponse: string;
 }
 
+// Figma REST API 相关类型
+export interface FigmaNode {
+  id: string;
+  name: string;
+  type: string;
+  children?: FigmaNode[];
+  characters?: string;
+  style?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: number;
+  };
+  absoluteBoundingBox?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface FigmaFileResponse {
+  document: FigmaNode;
+  components: Record<string, unknown>;
+  componentSets: Record<string, unknown>;
+  schemaVersion: number;
+  styles: Record<string, unknown>;
+  name: string;
+  lastModified: string;
+  thumbnailUrl: string;
+  version: string;
+  role: string;
+  editorType: string;
+  linkAccess: string;
+}
+
 // Chrome消息类型
 export interface ChromeMessage {
-  type: 'GET_FIGMA_SELECTION' | 'ANALYZE_WITH_AI' | 'FIGMA_DATA_RESPONSE' | 'AI_ANALYSIS_RESPONSE' | 'GET_OLLAMA_MODELS' | 'OLLAMA_MODELS_RESPONSE';
+  type: 'GET_FIGMA_FILE' | 'ANALYZE_WITH_AI' | 'FIGMA_DATA_RESPONSE' | 'AI_ANALYSIS_RESPONSE' | 'GET_OLLAMA_MODELS' | 'OLLAMA_MODELS_RESPONSE';
   data?: unknown;
   error?: string;
 } 

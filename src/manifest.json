@@ -11,6 +11,7 @@
   "host_permissions": [
     "https://www.figma.com/*",
     "https://figma.com/*",
+    "https://api.figma.com/*",
     "http://localhost:11434/*",
     "http://127.0.0.1:11434/*"
   ],
@@ -18,23 +19,8 @@
     "default_popup": "src/popup.html",
     "default_title": "Figma AI Analyzer"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://www.figma.com/*",
-        "https://figma.com/*"
-      ],
-      "js": ["src/content.ts"],
-      "run_at": "document_end"
-    }
-  ],
+
   "background": {
     "service_worker": "src/background.ts"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["src/injected.js"],
-      "matches": ["https://www.figma.com/*", "https://figma.com/*"]
-    }
-  ]
-} 
+  }
+}

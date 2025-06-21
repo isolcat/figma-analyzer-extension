@@ -1,11 +1,12 @@
-import type { ChromeMessage, AIAnalysisRequest, AIAnalysisResponse, PageAnalysisResult, AIProvider, OllamaModelsResponse } from './types';
+import type { ChromeMessage, AIAnalysisRequest, AIAnalysisResponse, PageAnalysisResult, AIProvider, OllamaModelsResponse, FigmaSelectionResult } from './types';
 import { ANALYSIS_PROMPT_TEMPLATE, TRANSLATION_PROMPT_TEMPLATE, TRANSLATE_AND_STRUCTURE_PROMPT_TEMPLATE } from './prompts';
+import { FigmaApiService } from './figmaApi';
 
 // 调用不同的AI服务
 async function callAIService(request: AIAnalysisRequest): Promise<string> {
   console.log('🔍 接收到AI请求:', request);
   
-  const result = await chrome.storage.sync.get(['deepseekApiKey', 'openaiApiKey', 'claudeApiKey', 'ollamaModel']);
+  const result = await chrome.storage.sync.get(['deepseekApiKey', 'openaiApiKey', 'claudeApiKey', 'ollamaModel', 'figmaApiToken']);
   
   const apiKeys: Record<AIProvider, string> = {
     deepseek: result.deepseekApiKey,
@@ -289,6 +290,66 @@ function getLanguageName(langCode: string): string {
   return langMap[langCode] || langCode;
 }
 
+// 处理 Figma 文件请求
+async function handleFigmaFileRequest(request: { 
+  fileId: string; 
+  figmaApiToken: string; 
+  useFullFile?: boolean;
+  currentUrl?: string;
+}): Promise<FigmaSelectionResult> {
+  try {
+    console.log('🔍 开始获取 Figma 文件数据...', { 
+      fileId: request.fileId,
+      useFullFile: request.useFullFile 
+    });
+
+    const figmaApi = new FigmaApiService(request.figmaApiToken);
+    
+    // 验证 API Token
+    const isValidToken = await figmaApi.validateToken();
+    if (!isValidToken) {
+      throw new Error('Figma API Token 无效，请检查您的 token 是否正确');
+    }
+
+    // 尝试从当前URL自动提取节点ID（如果用户选中了元素并在该URL）
+    let nodeId: string | undefined;
+    if (!request.useFullFile && request.currentUrl) {
+      const extractedNodeId = FigmaApiService.extractNodeIdFromUrl(request.currentUrl);
+      if (extractedNodeId) {
+        nodeId = extractedNodeId;
+        console.log('🎯 从 URL 自动提取到节点 ID:', nodeId);
+      }
+    }
+
+    // 使用智能获取功能
+    const { texts, source } = await figmaApi.getSmartTexts(request.fileId, {
+      nodeId: nodeId,
+      useFullFile: request.useFullFile
+    });
+    
+    if (texts.length === 0) {
+      console.warn('⚠️ 未找到任何文案');
+    }
+
+    const result: FigmaSelectionResult = {
+      elements: [], // REST API 方式下我们主要关注文案，元素信息可以后续扩展
+      texts: texts,
+      totalTextCount: texts.length
+    };
+
+    console.log('✅ 成功获取 Figma 文件数据:', {
+      source: source,
+      textCount: result.totalTextCount,
+      preview: texts.slice(0, 3).map(t => t.text)
+    });
+
+    return result;
+  } catch (error) {
+    console.error('❌ 获取 Figma 文件失败:', error);
+    throw error;
+  }
+}
+
 // 解析AI返回的结果 - 改进的JSON解析逻辑
 function parseAIResponse(rawResponse: string, operation: string): PageAnalysisResult {
   console.log(`[${operation}] 原始AI响应:`, rawResponse);
@@ -542,6 +603,25 @@ chrome.runtime.onMessage.addListener((message: ChromeMessage, _sender, sendRespo
         console.error('获取Ollama模型失败:', error);
         sendResponse({
           type: 'OLLAMA_MODELS_RESPONSE',
+          error: error.message
+        });
+      });
+
+    return true; // 保持消息通道开放
+  }
+
+  if (message.type === 'GET_FIGMA_FILE') {
+    handleFigmaFileRequest(message.data as { fileId: string; figmaApiToken: string; useFullFile?: boolean; currentUrl?: string })
+      .then(figmaData => {
+        sendResponse({
+          type: 'FIGMA_DATA_RESPONSE',
+          data: figmaData
+        });
+      })
+      .catch(error => {
+        console.error('获取Figma文件失败:', error);
+        sendResponse({
+          type: 'FIGMA_DATA_RESPONSE',
           error: error.message
         });
       });
