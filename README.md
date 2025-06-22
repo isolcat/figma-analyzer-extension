@@ -1,15 +1,17 @@
 # Figma AI Analyzer
 
-基于Chrome Extension的Figma设计元素AI分析工具，支持实时提取选中元素并生成标准化分析报告。
+[English](README.md) | [中文](README_CN.md)
 
-## 核心功能
+Chrome Extension for Figma design element AI analysis with real-time extraction and standardized reporting.
 
-- 🎯 **实时元素提取** - 直接从Figma Web版获取选中设计元素
-- 🤖 **AI智能分析** - 集成DeepSeek API，生成结构化分析结果
-- 📋 **标准化输出** - JSON格式的专业设计分析报告
-- ⚙️ **自定义提示** - 支持个性化AI分析策略
+## Core Features
 
-## 技术栈
+- 🎯 **Real-time Element Extraction** - Direct access to selected Figma Web elements
+- 🤖 **AI-Powered Analysis** - Integrated DeepSeek API for structured analysis
+- 📋 **Standardized Output** - Professional design analysis in JSON format
+- ⚙️ **Custom Prompts** - Support for personalized AI analysis strategies
+
+## Tech Stack
 
 ```
 React 19 + TypeScript + Vite 6
@@ -18,52 +20,52 @@ Chrome Extension Manifest V3
 DeepSeek AI API
 ```
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 安装依赖
+# Install dependencies
 pnpm install
 
-# 开发模式
+# Development mode
 pnpm dev
 
-# 构建扩展
+# Build extension
 pnpm build
 
-# 加载到Chrome
-# chrome://extensions/ -> 开发者模式 -> 加载已解压的扩展程序 -> 选择dist目录
+# Load to Chrome
+# chrome://extensions/ -> Developer mode -> Load unpacked -> Select dist directory
 ```
 
-## 使用流程
+## Usage Flow
 
-1. **配置** - 在扩展中设置DeepSeek API密钥
-2. **选择** - 在Figma中选中目标设计元素
-3. **提取** - 点击扩展获取元素数据
-4. **分析** - AI生成标准化分析报告
+1. **Configure** - Set DeepSeek API key in extension
+2. **Select** - Choose target design elements in Figma
+3. **Extract** - Click extension to fetch element data
+4. **Analyze** - AI generates standardized analysis report
 
-## 架构说明
+## Architecture
 
 ```
-Background Script    <- API调用和数据处理
-Popup Interface      <- 用户交互界面  
-Content Script       <- 消息通信桥梁
-Injected Script      <- Figma API访问
+Background Script    <- API calls and data processing
+Popup Interface      <- User interaction interface  
+Content Script       <- Message communication bridge
+Injected Script      <- Figma API access
 ```
 
-## 输出示例
+## Output Example
 
 ```json
 {
-  "pageType": "登录界面",
+  "pageType": "Login Interface",
   "elements": [
     {
-      "name": "登录按钮",
+      "name": "Login Button",
       "type": "RECTANGLE", 
-      "purpose": "用户认证提交",
-      "recommendations": ["增加悬停效果", "优化点击反馈"]
+      "purpose": "User authentication submission",
+      "recommendations": ["Add hover effects", "Optimize click feedback"]
     }
   ],
-  "suggestions": ["统一视觉层次", "优化交互流程"]
+  "suggestions": ["Unify visual hierarchy", "Optimize interaction flow"]
 }
 ```
 
