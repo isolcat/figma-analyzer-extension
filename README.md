@@ -1,5 +1,9 @@
 # Figma AI Analyzer
 
+
+https://github.com/user-attachments/assets/0ebe54ae-48b4-42d5-8a45-5e432f6278ed
+
+
 [English](README.md) | [中文](README_CN.md)
 
 Chrome Extension for Figma design element AI analysis with real-time extraction and standardized reporting.
